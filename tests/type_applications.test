@@ -1,0 +1,113 @@
+---------------------------------------------------------------------
+RUN tests/typeAppsShow.hs --hint=data/type_applications.yaml --only="Use visible type application"
+FILE tests/typeAppsShow.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsShow where
+
+a x = show x
+b x = show @Int x
+OUTPUT
+tests/typeAppsShow.hs:4:7-10: Warning: Use visible type application
+Found:
+  show
+Note: may break the code
+
+1 hint
+---------------------------------------------------------------------
+RUN tests/typeAppsFromIntegral.hs --hint=data/type_applications.yaml --only="Use visible type application"
+FILE tests/typeAppsFromIntegral.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsFromIntegral where
+
+a = fromIntegral (1 :: Int)
+b = fromIntegral @Int (1 :: Int)
+c = fromIntegral @Int @Integer (1 :: Int)
+OUTPUT
+tests/typeAppsFromIntegral.hs:4:5-16: Warning: Use visible type application
+Found:
+  fromIntegral
+Note: may break the code
+
+tests/typeAppsFromIntegral.hs:5:5-16: Warning: Use visible type application
+Found:
+  fromIntegral
+Note: may break the code
+
+2 hints
+---------------------------------------------------------------------
+RUN tests/typeAppsForbidden.hs --hint=data/type_applications.yaml --only="Avoid visible type application"
+FILE tests/typeAppsForbidden.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsForbidden where
+
+a x = id @Int x
+b x = id x
+OUTPUT
+tests/typeAppsForbidden.hs:4:7-8: Warning: Avoid visible type application
+Found:
+  id
+Note: may break the code
+
+1 hint
+---------------------------------------------------------------------
+RUN tests/typeAppsRequiredPattern.hs --hint=data/type_applications.yaml --only="Use visible type application"
+FILE tests/typeAppsRequiredPattern.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsRequiredPattern where
+
+f (Just x) = x
+g (Just @Int x) = x
+OUTPUT
+tests/typeAppsRequiredPattern.hs:4:4-7: Warning: Use visible type application
+Found:
+  Just
+Note: may break the code
+
+1 hint
+---------------------------------------------------------------------
+RUN tests/typeAppsForbiddenPattern.hs --hint=data/type_applications.yaml --only="Avoid visible type application"
+FILE tests/typeAppsForbiddenPattern.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsForbiddenPattern where
+
+f (Left @Int x) = x
+g (Left x) = x
+OUTPUT
+tests/typeAppsForbiddenPattern.hs:4:4-7: Warning: Avoid visible type application
+Found:
+  Left
+Note: may break the code
+
+1 hint
+---------------------------------------------------------------------
+RUN tests/typeAppsShowInstance.hs --hint=data/type_applications.yaml --only="Use visible type application"
+FILE tests/typeAppsShowInstance.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsShowInstance where
+
+newtype Secret = Secret String
+instance Show Secret where
+  show _ = show @String "<secret>"
+f x = show x
+OUTPUT
+tests/typeAppsShowInstance.hs:7:7-10: Warning: Use visible type application
+Found:
+  show
+Note: may break the code
+
+1 hint
+---------------------------------------------------------------------
+RUN tests/typeAppsConflict.hs --hint=data/type_applications.yaml --only="Use visible type application"
+FILE tests/typeAppsConflict.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsConflict where
+import Data.Map
+import Data.Set
+x = fromList [(1, 2)]
+OUTPUT
+tests/typeAppsConflict.hs:5:5-12: Warning: Use visible type application
+Found:
+  fromList
+Note: may break the code
+
+1 hint
