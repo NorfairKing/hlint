@@ -9,7 +9,7 @@
 module Config.Type(
     Severity(..), Classify(..), HintRule(..), Note(..), Setting(..),
     Restrict(..), RestrictType(..), RestrictIdents(..), SmellType(..),
-    RestrictImportStyle(..), QualifiedStyle(..),
+    RestrictImportStyle(..), QualifiedStyle(..), RestrictTypeApp(..),
     defaultHintName, isUnifyVar, showNotes, getSeverity, getRestrictType, getSmellType
     ) where
 
@@ -153,6 +153,19 @@ data QualifiedStyle
   | QualifiedStyleUnrestricted
   deriving Show
 
+data RestrictTypeApp
+  = TypeAppRequired Int -- ^ at least this many visible type applications (>= 1)
+  | TypeAppForbidden -- ^ no visible type applications
+  deriving (Eq, Show)
+
+instance Semigroup RestrictTypeApp where
+  TypeAppRequired a <> TypeAppRequired b = TypeAppRequired (max a b)
+  TypeAppForbidden <> TypeAppForbidden = TypeAppForbidden
+  -- If a function is both required and forbidden to carry a type application
+  -- (e.g. via overlapping rules), requiring one wins.
+  TypeAppRequired a <> TypeAppForbidden = TypeAppRequired a
+  TypeAppForbidden <> TypeAppRequired a = TypeAppRequired a
+
 data Restrict = Restrict
     {restrictType :: RestrictType
     ,restrictDefault :: Bool
@@ -161,6 +174,7 @@ data Restrict = Restrict
     ,restrictAsRequired :: Alt Maybe Bool -- for RestrictModule only
     ,restrictImportStyle :: Alt Maybe RestrictImportStyle -- for RestrictModule only
     ,restrictQualifiedStyle :: Alt Maybe QualifiedStyle -- for RestrictModule only
+    ,restrictTypeApp :: Maybe RestrictTypeApp -- for RestrictFunction only
     ,restrictWithin :: [(String, String)]
     ,restrictIdents :: RestrictIdents -- for RestrictModule only, what identifiers can be imported from it
     ,restrictMessage :: Maybe String

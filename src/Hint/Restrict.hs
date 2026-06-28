@@ -91,7 +91,7 @@ instance Semigroup RestrictItem where
 -- distinguish functions with the same name.
 -- For example, this allows us to have separate rules for "Data.Map.fromList" and "Data.Set.fromList".
 -- Using newtype rather than type because we want to define (<>) as 'Map.unionWith (<>)'.
-newtype RestrictFunction = RestrictFun (Map.Map (Maybe String) ([(String, String)], Maybe String))
+newtype RestrictFunction = RestrictFun (Map.Map (Maybe String) ([(String, String)], Maybe String, Maybe RestrictTypeApp))
 
 instance Semigroup RestrictFunction where
     RestrictFun m1 <> RestrictFun m2 = RestrictFun (Map.unionWith (<>) m1 m2)
@@ -104,7 +104,7 @@ restrictions settings = (rFunction, rOthers)
     where
         (map snd -> rfs, ros) = partition ((== RestrictFunction) . fst) [(restrictType x, x) | SettingRestrict x <- settings]
         rFunction = (all restrictDefault rfs, Map.fromListWith (<>) [mkRf s r | r <- rfs, s <- restrictName r])
-        mkRf s Restrict{..} = (name, RestrictFun $ Map.singleton modu (restrictWithin, restrictMessage))
+        mkRf s Restrict{..} = (name, RestrictFun $ Map.singleton modu (restrictWithin, restrictMessage, restrictTypeApp))
           where
             -- Parse module and name from s. module = Nothing if the rule is unqualified.
             (modu, name) = first (fmap NonEmpty.init . NonEmpty.nonEmpty) (breakEnd (== '.') s)
@@ -271,14 +271,72 @@ importListToIdents =
 
 checkFunctions :: Scope -> String -> [LHsDecl GhcPs] -> RestrictFunctions -> [Idea]
 checkFunctions scope modu decls (def, mp) =
-    [ (ideaMessage message $ ideaNoTo $ warn "Avoid restricted function" (reLoc x) (reLoc x) []){ideaDecl = [dname]}
+    [ (ideaMessage message $ ideaNoTo $ warn hint (reLoc x) (reLoc x) []){ideaDecl = [dname]}
     | d <- decls
     , let dname = fromMaybe "" (declName d)
     , x <- universeBi d :: [LocatedN RdrName]
     , let xMods = possModules scope x
-    , let (withins, message) = fromMaybe ([("","") | def], Nothing) (findFunction mp x xMods)
-    , not $ within modu dname withins
+    , let (withins, message, typeApp) = fromMaybe ([("","") | def], Nothing, Nothing) (findFunction mp x xMods)
+    , hint <- maybeToList $ restrictFunctionHint modu dname withins typeApp typeAppCounts bindingSpans x
     ]
+  where
+    typeAppCounts = typeApplicationCounts decls
+    bindingSpans = bindingNameSpans decls
+
+-- | The hint to emit for a use of a (possibly) restricted function, or
+-- 'Nothing' if the use is allowed. A 'within' violation takes precedence over a
+-- visible type application violation.
+restrictFunctionHint
+    :: String -> String -> [(String, String)] -> Maybe RestrictTypeApp
+    -> Map.Map SrcSpanD Int -> Set.Set SrcSpanD -> LocatedN RdrName -> Maybe String
+restrictFunctionHint modu dname withins typeApp typeAppCounts bindingSpans x
+    | not $ within modu dname withins = Just "Avoid restricted function"
+    -- The defining occurrence of a function (e.g. a 'Show' instance's 'show')
+    -- cannot carry a visible type application, so never require one there.
+    | sp `Set.member` bindingSpans = Nothing
+    | otherwise = case typeApp of
+        Just (TypeAppRequired n) | count < n -> Just "Use visible type application"
+        Just TypeAppForbidden    | count > 0 -> Just "Avoid visible type application"
+        _ -> Nothing
+  where
+    sp = SrcSpanD (locA (getLoc x))
+    count = Map.findWithDefault 0 sp typeAppCounts
+
+-- | Source spans of the names bound by function bindings (including class and
+-- instance method definitions), so that defining occurrences are not mistaken
+-- for uses by the visible-type-application check.
+bindingNameSpans :: [LHsDecl GhcPs] -> Set.Set SrcSpanD
+bindingNameSpans decls = Set.fromList
+    [ SrcSpanD (locA (getLoc fid))
+    | FunBind{fun_id = fid} <- universeBi decls :: [HsBindLR GhcPs GhcPs]
+    ]
+
+-- | A map from the source span of a name to the number of visible type
+-- applications attached to it. Each @\@T@ is a separate 'HsAppType' node (or an
+-- element of a constructor pattern's type-argument list), and every node in an
+-- application chain shares the head name's source span, so summing gives the
+-- count.
+typeApplicationCounts :: [LHsDecl GhcPs] -> Map.Map SrcSpanD Int
+typeApplicationCounts decls = Map.fromListWith (+) $
+    [ (SrcSpanD (locA (getLoc h)), 1)
+    | L _ (HsAppType _ fun _) <- universeBi decls :: [LHsExpr GhcPs]
+    , Just h <- [typeAppHead fun]
+    ] ++
+    [ (SrcSpanD (locA (getLoc name)), length tyArgs)
+    | L _ (ConPat _ name (PrefixCon tyArgs _)) <- universeBi decls :: [LPat GhcPs]
+    , not $ null tyArgs
+    ]
+
+-- | The head name of an application chain, looking through value and type
+-- applications and parentheses. Only walks the function spine, never into
+-- arguments, so applications of distinct functions don't interfere.
+typeAppHead :: LHsExpr GhcPs -> Maybe (LocatedN RdrName)
+typeAppHead = \case
+    L _ (HsVar _ name)      -> Just name
+    L _ (HsApp _ fun _)     -> typeAppHead fun
+    L _ (HsAppType _ fun _) -> typeAppHead fun
+    L _ (HsPar _ fun)       -> typeAppHead fun
+    _                       -> Nothing
 
 -- Returns Just iff there are rules for x, which are either unqualified, or qualified with a module that is
 -- one of x's possible modules.
@@ -288,7 +346,7 @@ findFunction
     :: Map.Map String RestrictFunction
     -> LocatedN RdrName
     -> [ModuleName]
-    -> Maybe ([(String, String)], Maybe String)
+    -> Maybe ([(String, String)], Maybe String, Maybe RestrictTypeApp)
 findFunction restrictMap (rdrNameStr -> x) (map moduleNameString -> possMods) = do
     (RestrictFun mp) <- Map.lookup x restrictMap
     n <- NonEmpty.nonEmpty . Map.elems $ Map.filterWithKey (const . maybe True (`elem` possMods)) mp
