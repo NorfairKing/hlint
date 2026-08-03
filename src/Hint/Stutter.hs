@@ -20,6 +20,9 @@ instance C Text.Text -- Text
 foo = undefined :: Map.Map k v -- Map
 import qualified Data.Map as Map \
 foo :: Map.Map k v -- @Note requires importing Data.Map (Map)
+import qualified Data.Map as Map \
+import qualified Data.IntMap as Map \
+foo :: Map.Map k v -- @Note requires importing Map unqualified
 import qualified Data.Map as M \
 foo :: M.Map k v
 foo :: Map k v
