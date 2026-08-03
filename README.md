@@ -441,9 +441,21 @@ For restricted functions you can also control visible type applications with `ty
 
 This flags any call to `show` that omits a visible type argument, any call to `fromIntegral` with fewer than two type arguments (both `a` and `b` in `fromIntegral :: (Integral a, Num b) => a -> b` need to be fixed), and any call to `id` that has one. It also works on constructors in patterns.
 
+A type argument of `@_` does not count towards `required`, since it leaves the type just as inferred as writing no type argument at all, so `fromIntegral @_ @_` is still flagged. It does count towards `forbidden`, which asks that no visible type application is written at all.
+
+Only positions that can carry a visible type application are checked, so a name appearing in a type signature, a class method signature, a record field declaration or a binder is never flagged.
+
 You can match on module names using [glob](https://en.wikipedia.org/wiki/Glob_(programming))-style wildcards. Module names are treated like file paths, except that periods in module names are like directory separators in file paths. So `**.*Spec` will match `Spec`, `PreludeSpec`, `Data.ListSpec`, and many more. But `*Spec` won't match `Data.ListSpec` because of the separator. See [the filepattern library](https://hackage.haskell.org/package/filepattern) for a more thorough description of the matching.
 
 Restrictions are unified between wildcard and specific matches. With `asRequired`, `importStyle` and `qualifiedStyle` fields, the more specific option takes precedence. The list fields are merged. With multiple wildcard matches, the precedence between them is not guaranteed (but in practice, names are sorted in the reverse lexicograpic order, and the first one wins -- which hopefully means the more specific one more often than not)
+
+The `typeApplications` field is the exception: when several rules match one name, the last-declared one wins. Merging is no use here, because a name cannot sensibly both require and forbid a type application, so the rules for `fromList` below leave `Data.Map.fromList` forbidden from carrying one:
+
+```yaml
+- functions:
+  - {name: Data.Map.fromList, typeApplications: required}
+  - {name: fromList, typeApplications: forbidden}
+```
 
 If the same module is specified multiple times, for `asRequired`, `importStyle`
 and `qualifiedStyle` fields, only the first definition will take effect.

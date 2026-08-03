@@ -156,15 +156,7 @@ data QualifiedStyle
 data RestrictTypeApp
   = TypeAppRequired Int -- ^ at least this many visible type applications (>= 1)
   | TypeAppForbidden -- ^ no visible type applications
-  deriving (Eq, Show)
-
-instance Semigroup RestrictTypeApp where
-  TypeAppRequired a <> TypeAppRequired b = TypeAppRequired (max a b)
-  TypeAppForbidden <> TypeAppForbidden = TypeAppForbidden
-  -- If a function is both required and forbidden to carry a type application
-  -- (e.g. via overlapping rules), requiring one wins.
-  TypeAppRequired a <> TypeAppForbidden = TypeAppRequired a
-  TypeAppForbidden <> TypeAppRequired a = TypeAppRequired a
+  deriving Show
 
 data Restrict = Restrict
     {restrictType :: RestrictType
