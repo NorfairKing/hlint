@@ -343,3 +343,20 @@ Found:
 Note: may break the code
 
 2 hints
+---------------------------------------------------------------------
+RUN tests/typeAppsBadInt.hs --hint=tests/typeAppsBadInt.yaml
+FILE tests/typeAppsBadInt.yaml
+- functions:
+  - {name: show, typeApplications: 2.5}
+FILE tests/typeAppsBadInt.hs
+module TypeAppsBadInt where
+OUTPUT
+user error (Failed to read YAML configuration file tests/typeAppsBadInt.yaml
+  Aeson exception:
+Error in $: Error when decoding YAML, typeApplications must be 'required', 'forbidden', or an integer >= 1
+Along path: root 0 functions 0 typeApplications
+When at: Number
+- functions:
+  - name: show
+    typeApplications: 2.5
+)

@@ -32,6 +32,7 @@ import Data.Maybe
 import Data.List.NonEmpty qualified as NE
 import Data.List.Extra
 import Data.Tuple.Extra
+import Control.Applicative
 import Control.Monad.Extra
 import Data.Text qualified as T
 import Data.Vector qualified as V
@@ -364,8 +365,10 @@ parseRestrict restrictType v = do
             restrictTypeApp <- parseFieldOpt "typeApplications" v >>= maybe (pure Nothing) (\val ->
               let bad = parseFail val "typeApplications must be 'required', 'forbidden', or an integer >= 1" in
               case getVal val of
+                -- 'parseInt' rejects a fractional number with a message of its
+                -- own, which does not name the field it came from.
                 Number{} -> do
-                  n <- parseInt val
+                  n <- parseInt val <|> bad
                   if n < 1 then bad else pure $ Just $ TypeAppRequired n
                 String "required" -> pure $ Just $ TypeAppRequired 1
                 String "forbidden" -> pure $ Just TypeAppForbidden
