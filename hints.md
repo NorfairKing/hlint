@@ -1500,6 +1500,7 @@ Suggestion:
 <td>
 Example: 
 <pre>
+import Data.Map (Map) 
 import qualified Data.Map as Map 
 foo :: Map.Map k v
 </pre>
