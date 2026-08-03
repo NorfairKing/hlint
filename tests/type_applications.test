@@ -303,3 +303,43 @@ Found:
 Note: may break the code
 
 4 hints
+---------------------------------------------------------------------
+RUN tests/typeAppsInfix.hs --hint=tests/typeAppsInfix.yaml --only="Use visible type application"
+FILE tests/typeAppsInfix.yaml
+- functions:
+  - {name: seq, typeApplications: required}
+  - {name: "<+>", typeApplications: required}
+  - {name: ":+", typeApplications: required}
+  - {name: Rec, typeApplications: required}
+FILE tests/typeAppsInfix.hs
+{-# LANGUAGE TypeApplications #-}
+module TypeAppsInfix where
+
+data Rec = Rec {recA :: Int}
+data Pair = Int :+ Int
+
+-- An operator used infix or in a section, and a constructor pattern that is not
+-- in prefix form, cannot carry a visible type application. Writing one means
+-- restructuring the expression, which is not what the hint is asking for.
+f a b = a `seq` b
+g a b = a <+> b
+h a = (a <+>)
+i a = (<+> a)
+j (x :+ y) = x
+k Rec{} = 1
+
+-- Parenthesised, the operator is back in prefix position and can carry one.
+l = (<+>)
+m (Rec a) = a
+OUTPUT
+tests/typeAppsInfix.hs:18:5-9: Warning: Use visible type application
+Found:
+  <+>
+Note: may break the code
+
+tests/typeAppsInfix.hs:19:4-6: Warning: Use visible type application
+Found:
+  Rec
+Note: may break the code
+
+2 hints
