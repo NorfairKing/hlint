@@ -386,7 +386,8 @@ parseRestrict restrictType v = do
                 case restrictType of
                     RestrictModule -> ["as", "asRequired", "importStyle", "qualifiedStyle", "badidents", "only"]
                     RestrictFunction -> ["typeApplications"]
-                    _ -> []
+                    RestrictExtension -> []
+                    RestrictFlag -> []
             pure Restrict{restrictDefault=True,..}
 
 parseWithin :: Val -> Parser [(String, String)] -- (module, decl)
