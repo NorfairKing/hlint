@@ -443,7 +443,7 @@ This flags any call to `show` that omits a visible type argument, any call to `f
 
 A type argument of `@_` does not count towards `required`, since it leaves the type just as inferred as writing no type argument at all, so `fromIntegral @_ @_` is still flagged. It does count towards `forbidden`, which asks that no visible type application is written at all.
 
-Only positions that can carry a visible type application are checked, so a name appearing in a type signature, a class method signature, a record field declaration or a binder is never flagged.
+Only positions that can carry a visible type application are checked. A name appearing in a type signature, a class method signature, a record field declaration or a binder is never flagged, and neither is an operator used infix or in a section, or a constructor pattern that is not in prefix form. So ``a `seq` b`` and `Rec{}` are left alone, while `(<+>)` and `Rec a` are checked.
 
 You can match on module names using [glob](https://en.wikipedia.org/wiki/Glob_(programming))-style wildcards. Module names are treated like file paths, except that periods in module names are like directory separators in file paths. So `**.*Spec` will match `Spec`, `PreludeSpec`, `Data.ListSpec`, and many more. But `*Spec` won't match `Data.ListSpec` because of the separator. See [the filepattern library](https://hackage.haskell.org/package/filepattern) for a more thorough description of the matching.
 

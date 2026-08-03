@@ -324,21 +324,43 @@ restrictFunctionHint modu dname withins typeApp typeAppCounts typeAppSites x
     count = Map.findWithDefault noTypeApps sp typeAppCounts
 
 -- | Source spans of the names that can carry a visible type application: the
--- head of an expression, and a constructor in a pattern. Every other occurrence
--- of a name -- a type signature, a class method signature, a record field, a
--- binder -- is somewhere no type application can be written, so demanding one
--- there would be advice that cannot be followed.
+-- head of an expression, and a constructor in a prefix pattern. Every other
+-- occurrence of a name -- a type signature, a class method signature, a record
+-- field, a binder -- is somewhere no type application can be written, so
+-- demanding one there would be advice that cannot be followed.
+--
+-- An operator in infix position or in a section is excluded for the same
+-- reason: @a \`seq\` b@ can only carry one after being restructured into
+-- @seq \@T a b@, and a hint asking for that is asking for the wrong thing.
+-- Parenthesised, as in @(\<+\>)@, the operator is back in prefix position and
+-- does count.
 --
 -- Note that this does not resolve local binders, so a locally bound name that
 -- shadows a restricted one is still treated as a use of it.
 typeApplicationSites :: [LHsDecl GhcPs] -> Set.Set SrcSpanD
-typeApplicationSites decls = Set.fromList $
-    [ SrcSpanD (locA (getLoc name))
-    | L _ (HsVar _ name) <- universeBi decls :: [LHsExpr GhcPs]
-    ] ++
-    [ SrcSpanD (locA (getLoc name))
-    | L _ (ConPat _ name _) <- universeBi decls :: [LPat GhcPs]
-    ]
+typeApplicationSites decls = Set.difference sites infixOperators
+  where
+    sites :: Set.Set SrcSpanD
+    sites = Set.fromList $
+        [ SrcSpanD (locA (getLoc name))
+        | L _ (HsVar _ name) <- universeBi decls :: [LHsExpr GhcPs]
+        ] ++
+        [ SrcSpanD (locA (getLoc name))
+        | L _ (ConPat _ name PrefixCon{}) <- universeBi decls :: [LPat GhcPs]
+        ]
+
+    infixOperators :: Set.Set SrcSpanD
+    infixOperators = Set.fromList
+        [ SrcSpanD (locA (getLoc name))
+        | L _ (HsVar _ name) <- concatMap operator (universeBi decls :: [LHsExpr GhcPs])
+        ]
+
+    operator :: LHsExpr GhcPs -> [LHsExpr GhcPs]
+    operator = \case
+        L _ (OpApp _ _ op _) -> [op]
+        L _ (SectionL _ _ op) -> [op]
+        L _ (SectionR _ op _) -> [op]
+        _ -> []
 
 -- | A map from the source span of a name to the visible type applications
 -- attached to it. Each @\@T@ is a separate 'HsAppType' node (or an element of a
