@@ -23,6 +23,12 @@ foo :: Map.Map k v -- @Note requires importing Data.Map (Map)
 import qualified Data.Map as Map \
 import qualified Data.IntMap as Map \
 foo :: Map.Map k v -- @Note requires importing Map unqualified
+import Data.Map (Map) \
+import qualified Data.Map as Map \
+foo :: Map.Map k v -- @Note Map is already in scope unqualified
+import qualified Data.Map as Map \
+import Foo (Map) \
+foo :: Map.Map k v
 import qualified Data.Map as M \
 foo :: M.Map k v
 foo :: Map k v
@@ -41,7 +47,7 @@ import Data.Map as Map
 module Hint.Stutter(stutterHint) where
 
 import Hint.Type(DeclHint,Note(..),Severity(..),rawIdea)
-import GHC.Util(Scope,possModules)
+import GHC.Util(Scope,possModules,importedUnqualified)
 
 import Data.Generics.Uniplate.DataOnly
 import Prelude
@@ -64,8 +70,16 @@ stutterHint scope _ decl =
     | L l ty@(HsTyVar x promoted lname@(L nameLoc name)) <- universeBi decl :: [LHsType GhcPs]
     , stutters name
     , let occ = rdrNameOcc name
+    , not $ qualifierDisambiguates scope lname occ
     , let unqualified = HsTyVar x promoted (L nameLoc (mkRdrUnqual occ)) :: HsType GhcPs
     ]
+
+-- | Is the qualifier telling two types apart? An import that already binds the
+-- name unqualified to some other module makes it load-bearing: dropping it
+-- would be an ambiguous occurrence, or worse, silently the other type.
+qualifierDisambiguates :: Scope -> LocatedN RdrName -> OccName -> Bool
+qualifierDisambiguates scope name occ =
+    any (`notElem` possModules scope name) $ importedUnqualified scope (mkRdrUnqual occ)
 
 -- | Is the qualifier a single component repeating the name it qualifies, as in
 -- @Map.Map@? A qualifier that is a full module name, as in @Data.Map.Map@, is
@@ -74,11 +88,14 @@ stutters :: RdrName -> Bool
 stutters (Qual modu occ) = moduleNameString modu == occNameString occ
 stutters _ = False
 
--- | Spell out the import that brings the type into scope unqualified whenever
--- the qualifier resolves to a single module. Deliberately silent on whether it
--- joins the qualified import or replaces it, since that depends on whether the
--- qualifier is used elsewhere in the module.
+-- | Spell out what has to change for the qualifier to go away, which is nothing
+-- at all when the type is already in scope unqualified. Where an import is
+-- needed, deliberately silent on whether it joins the qualified one or replaces
+-- it, since that depends on whether the qualifier is used elsewhere.
 importNote :: Scope -> LocatedN RdrName -> OccName -> String
-importNote scope name occ = case possModules scope name of
-    [modu] -> "requires importing " ++ moduleNameString modu ++ " (" ++ occNameString occ ++ ")"
-    _ -> "requires importing " ++ occNameString occ ++ " unqualified"
+importNote scope name occ
+    | not $ null $ importedUnqualified scope (mkRdrUnqual occ) =
+        occNameString occ ++ " is already in scope unqualified"
+    | [modu] <- possModules scope name =
+        "requires importing " ++ moduleNameString modu ++ " (" ++ occNameString occ ++ ")"
+    | otherwise = "requires importing " ++ occNameString occ ++ " unqualified"
